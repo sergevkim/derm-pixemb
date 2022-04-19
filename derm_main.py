@@ -136,72 +136,6 @@ for i in range(DATASET_QUANTITY):
         nn_modules[i] = Image2Image()
         # nn_modules[i - 32].encoder = pretrained_model.encoder
 
-# from collections import defaultdict
-# for i in range(DATASET_QUANTITY * 3 // 4):
-#     class_quantity = defaultdict(int)
-#     for el in train_datasets[i]:
-#         class_quantity[el[1]] += 1
-#     print(class_quantity)
-#     class_quantity = defaultdict(int)
-#     for el in test_datasets[i]:
-#         class_quantity[el[1]] += 1
-#     print(class_quantity)
-
-# train_images = get_paths('/root/dmartynov/celeba/celeba/img_align_celeba/', 0, 10000)
-# test_images = get_paths('/root/dmartynov/celeba/celeba/img_align_celeba/', 10000, 11000)
-# train_datasets[0] = CelebaMale(train_images, attributes_list, annots)
-# test_datasets[0] = CelebaMale(test_images, attributes_list, annots)
-
-# train_images = get_paths('/root/dmartynov/celeba/celeba/img_align_celeba/', 11000, 21000)
-# test_images = get_paths('/root/dmartynov/celeba/celeba/img_align_celeba/', 21000, 22000)
-# train_datasets[1] = CelebaSmile(train_images, attributes_list, annots)
-# test_datasets[1] = CelebaSmile(test_images, attributes_list, annots)
-
-# MAX_IDENT = 570
-# images = get_paths('/root/dmartynov/celeba/celeba/img_align_celeba/', 0, -1, MAX_IDENT)
-# np.random.shuffle(images)
-# train_images = images[:10000]
-# test_images = images[10000:11000]
-# train_datasets[2] = CelebaIdentity(train_images, identity)
-# test_datasets[2] = CelebaIdentity(test_images, identity)
-
-# train_images = get_paths('/root/dmartynov/celeba/celeba/img_align_celeba/', 22000, 32000)
-# test_images = get_paths('/root/dmartynov/celeba/celeba/img_align_celeba/', 32000, 33000)
-# train_datasets[3] = CelebaYoung(train_images, attributes_list, annots)
-# test_datasets[3] = CelebaYoung(test_images, attributes_list, annots)
-
-# train_images = get_paths('/root/dmartynov/celeba/celeba/img_align_celeba/', 33000, 43000)
-# test_images = get_paths('/root/dmartynov/celeba/celeba/img_align_celeba/', 43000, 44000)
-# train_datasets[4] = CelebaLandmarks(train_images, landmarks)
-# test_datasets[4] = CelebaLandmarks(test_images, landmarks)
-
-# train_images = get_paths('/root/dmartynov/CelebAMask-HQ/CelebA-HQ-img/', 0, 10000)
-# test_images = get_paths('/root/dmartynov/CelebAMask-HQ/CelebA-HQ-img/', 10000, 11000)
-# train_datasets[5] = CelebaNose(train_images)
-# test_datasets[5] = CelebaNose(test_images)
-
-# train_images = get_paths('/root/dmartynov/CelebAMask-HQ/CelebA-HQ-img/', 11000, 21000)
-# test_images = get_paths('/root/dmartynov/CelebAMask-HQ/CelebA-HQ-img/', 21000, 22000)
-# train_datasets[6] = CelebaSkin(train_images)
-# test_datasets[6] = CelebaSkin(test_images)
-
-# data_size = len(train_datasets)
-
-# for i in range(DATASET_QUANTITY):
-#     print(f"train_dataset length {len(train_datasets[i])}")
-#     print(f"test_datasets length {len(test_datasets[i])}")
-
-# from nn_modules import Image2VectorWithCE, Image2VectorWithMSE, Image2Image
-
-# nn_modules = [None] * DATASET_QUANTITY
-# nn_modules[0] = Image2VectorWithCE(2)
-# nn_modules[1] = Image2VectorWithCE(2)
-# nn_modules[2] = Image2VectorWithCE(MAX_IDENT)
-# nn_modules[3] = Image2VectorWithCE(2)
-# nn_modules[4] = Image2VectorWithMSE(10)
-# nn_modules[5] = Image2Image()
-# nn_modules[6] = Image2Image()
-
 for i in range(DATASET_QUANTITY):
     nn_modules[i].to(device)
 
@@ -229,13 +163,6 @@ for epoch in range(NUM_EPOCHS):
 
     for batch in tqdm.tqdm(zip(*train_batch_gens)):
         for i in range(DATASET_QUANTITY):
-            # if True:
-            #     for p in nn_modules[i].encoder.parameters():
-            #         p.requires_grad = False
-            # else:
-            #     for p in nn_modules[i].encoder.parameters():
-            #         p.requires_grad = True
-
             optimizers[i].zero_grad()
 
             X_batch = batch[i][0].to(device)
@@ -302,4 +229,3 @@ for epoch in range(NUM_EPOCHS):
     for i in range(DATASET_QUANTITY):
         torch.save(nn_modules[i].state_dict(), "nn_module_train_" + str(DATASET_QUANTITY) + '_' + str(i) + ".pt")
         torch.save(optimizers[i].state_dict(), "optimizer_" + str(DATASET_QUANTITY) + '_' + str(i) + ".pt")
-
