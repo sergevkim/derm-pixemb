@@ -27,9 +27,11 @@ class CelebaBinaryCalssification(Dataset):
         self.attributes_list = attributes_list
         self.annots = annots
         self.class_name = class_name
-        self.transfom = transform
+        self.transform = transform
+
     def __len__(self):
         return len(self.images)
+
     def __getitem__(self, idx):
         im_name = self.images[idx]
         target = self.annots[im_name.split('/')[-1]][self.attributes_list.index(self.class_name)]
@@ -37,10 +39,12 @@ class CelebaBinaryCalssification(Dataset):
         shift_x = (256 - 218) // 2 # celeba sizes
         shift_y = (256 - 178) // 2
         image[shift_x: -shift_x, shift_y: -shift_y] = cv2.imread(im_name)
-        if self.transfom:
-             image = transform1(image).float()
+
+        if self.transform:
+            image = transform1(image).float()
         else:
             image = transform(image).float()
+
         return image, int((target + 1) // 2)
 
 
@@ -48,23 +52,26 @@ class CelebaSegmentation(Dataset):
     def __init__(self, images, class_name):
         self.images = sorted(images)
         self.class_name = class_name
+
     def __len__(self):
         return len(self.images)
+
     def __getitem__(self, idx):
         im_name = self.images[idx]
         num = im_name.split('/')[-1].split('.')[0]
         num = int(num)
-        # check
+        # check; TODO path to a data directory
         segm_name = "/root/dmartynov/CelebAMask-HQ/CelebAMask-HQ-mask-anno/" + str(num//2000) + '/' + str(num).zfill(5) + "_" + self.class_name + ".png"
         image = cv2.imread(im_name)
         image = transform(image).float()
+
+        # for some images we have no segm mask - so we need do filter them out
         if os.path.isfile(segm_name):
             segm_image = cv2.imread(segm_name, cv2.IMREAD_GRAYSCALE)
         else:
-            segm_image = None #TODO remove
-        if segm_image is None: # file not found == no mask
             segm_image = torch.zeros((1, 256, 256))
             # print("no mask")
+
         segm_image = transform(segm_image).float()
         segm_image = (segm_image > 0).float()
 
