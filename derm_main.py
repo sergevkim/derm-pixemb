@@ -1,16 +1,23 @@
-import numpy as np
-import time
-import torch
-import torch.nn as nn
-from torch.nn import functional as F
-import torchvision
-from torchvision import transforms
-import tqdm
 import os
-import cv2
-from torch.utils.data import Dataset
 import pickle
 import shutil
+import time
+from pathlib import Path
+
+import cv2
+import numpy as np
+import torch
+import torch.nn as nn
+import torchvision
+import tqdm
+from torch.nn import functional as F
+from torchvision import transforms
+from torchvision.transforms.transforms import Resize
+from torch.utils.data import Dataset
+
+from datasets import CelebaBinaryCalssification, CelebaSegmentation
+from nn_modules import Image2VectorWithCE, Image2VectorWithMSE, Image2Image
+
 
 def get_computing_device():
     if torch.cuda.is_available():
@@ -96,7 +103,6 @@ def get_balanced_paths(path, first, class_name, capacity):
             break
     return images_paths, int(filename.split('.')[0]) + 1
 
-from torchvision.transforms.transforms import Resize
 transform = transforms.Compose([
     transforms.ToPILImage(),
     transforms.Resize((256, 256)),
@@ -109,8 +115,6 @@ train_datasets = [None] * DATASET_QUANTITY
 test_datasets = [None] * DATASET_QUANTITY
 nn_modules = [None] * DATASET_QUANTITY
 
-from datasets import CelebaBinaryCalssification, CelebaSegmentation
-from nn_modules import Image2VectorWithCE, Image2VectorWithMSE, Image2Image
 
 # pretrained_model = Image2VectorWithCE(2)
 # pretrained_model.load_state_dict(torch.load("train_32_64/nn_module_32_0.pt"))
@@ -140,18 +144,32 @@ for i in range(DATASET_QUANTITY):
     nn_modules[i].to(device)
 
 batch_size = 8
-train_batch_gens = [torch.utils.data.DataLoader(train_datasets[i],
-                                              batch_size=batch_size,
-                                              shuffle=True,
-                                              num_workers=4) for i in range(DATASET_QUANTITY)]
+train_batch_gens = [
+    torch.utils.data.DataLoader(
+        train_datasets[i],
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=4,
+    ) for i in range(DATASET_QUANTITY)
+]
 
-val_batch_gens = [torch.utils.data.DataLoader(test_datasets[i],
-                                            batch_size=batch_size,
-                                            shuffle=False,
-                                            num_workers=4) for i in range(DATASET_QUANTITY)]
+val_batch_gens = [
+    torch.utils.data.DataLoader(
+        test_datasets[i],
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=4,
+    ) for i in range(DATASET_QUANTITY)
+]
 
 # was weight_decay=3e-5
-optimizers = [torch.optim.Adam(nn_modules[i].parameters(), lr=1e-3, weight_decay=3e-4) for i in range(DATASET_QUANTITY)]
+optimizers = [
+    torch.optim.Adam(
+        nn_modules[i].parameters(),
+        lr=1e-3,
+        weight_decay=3e-4,
+    ) for i in range(DATASET_QUANTITY)
+]
 
 NUM_EPOCHS = 20
 train_loss = [list() for _ in range(DATASET_QUANTITY)]
@@ -174,6 +192,7 @@ for epoch in range(NUM_EPOCHS):
 
             loss.backward()
             optimizers[i].step()
+
     print("train loss")
     for i in range(DATASET_QUANTITY):
         print(i, np.mean(train_loss[i]))
@@ -209,7 +228,6 @@ for epoch in range(NUM_EPOCHS):
         print(i, np.mean(metric))
         results[i][-1].append(np.mean(metric))
 
-
     print("validation metric")
     for i in range(DATASET_QUANTITY):
         nn_modules[i].train(False)
@@ -226,6 +244,10 @@ for epoch in range(NUM_EPOCHS):
     with open('results_train_' + str(DATASET_QUANTITY) + '.pkl', 'wb') as f:
         pickle.dump(results, f)
 
+    Path("/root/sergevkim/checkpoints").mkdir(parents=True, exist_ok=True)
     for i in range(DATASET_QUANTITY):
-        torch.save(nn_modules[i].state_dict(), "nn_module_train_" + str(DATASET_QUANTITY) + '_' + str(i) + ".pt")
-        torch.save(optimizers[i].state_dict(), "optimizer_" + str(DATASET_QUANTITY) + '_' + str(i) + ".pt")
+        # TODO add git commit hash to paths
+        model_path = f"checkpoints/nn_module_train_{str(DATASET_QUANTITY)}_{i}.pt"
+        optimizer_path = f"checkpoints/optimizer{str(DATASET_QUANTITY)}_{i}.pt"
+        torch.save(nn_modules[i].state_dict(), model_path)
+        torch.save(optimizers[i].state_dict(), optimizer_path)
