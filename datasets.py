@@ -1,4 +1,6 @@
+from pathlib import Path
 import os
+import typing as tp
 
 import cv2
 import numpy as np
@@ -6,6 +8,17 @@ import torch
 import torchvision.transforms as transforms
 from torch.utils.data import Dataset
 
+ATTRIBUTES_LIST = [
+    '5_o_Clock_Shadow', 'Arched_Eyebrows', 'Attractive', 'Bags_Under_Eyes',
+    'Bald', 'Bangs', 'Big_Lips', 'Big_Nose', 'Black_Hair', 'Blond_Hair',
+    'Blurry', 'Brown_Hair', 'Bushy_Eyebrows', 'Chubby', 'Double_Chin',
+    'Eyeglasses', 'Goatee', 'Gray_Hair', 'Heavy_Makeup', 'High_Cheekbones',
+    'Male', 'Mouth_Slightly_Open', 'Mustache', 'Narrow_Eyes', 'No_Beard',
+    'Oval_Face', 'Pale_Skin', 'Pointy_Nose', 'Receding_Hairline', 'Rosy_Cheeks',
+    'Sideburns', 'Smiling', 'Straight_Hair', 'Wavy_Hair', 'Wearing_Earrings',
+    'Wearing_Hat', 'Wearing_Lipstick', 'Wearing_Necklace', 'Wearing_Necktie',
+    'Young',
+]
 
 transform = transforms.Compose([
     transforms.ToPILImage(),
@@ -46,6 +59,75 @@ class CelebaBinaryCalssification(Dataset):
             image = transform(image).float()
 
         return image, int((target + 1) // 2)
+
+
+def load_attributes(file_path):
+    annots = {}
+
+    with open(file_path, 'r') as f:
+        for line in f.read().splitlines()[2:]:
+            values = line.split()
+            annots[values[0]] = np.array(list(map(float, values[1:])))
+
+    return annots
+
+
+def prepare_pos_neg_paths(path2labels, class_index: int = 5):  # 5 is Bald
+    pos_paths = list()
+    neg_paths = list()
+
+    for path, labels in path2labels.items():
+        if labels[class_index] == 1:
+            pos_paths.append(path)
+        else:
+            neg_paths.append(path)
+
+    return pos_paths, neg_paths
+
+
+class CelebAPosNegDataset(Dataset):
+    def __init__(
+        self,
+        data_path: Path,
+        class_name: str,
+        transform,
+        n_pairs: int,
+        pos_left_border: tp.Optional[int] = None,
+        pos_right_border: tp.Optional[int] = None,
+        neg_left_border: tp.Optional[int] = None,
+        neg_right_border: tp.Optional[int] = None,
+    ):
+        self.data_path = data_path
+        self.class_name = class_name
+        self.transform = transform
+        self.n_pairs = n_pairs
+
+        self.images_dir_path = data_path / 'img_align_celeba'
+        self.class_index = ATTRIBUTES_LIST.index(class_name)
+        self.path2labels = load_attributes(data_path / 'list_attr_celeba.txt')
+        self.pos_paths, self.neg_paths = \
+            prepare_pos_neg_paths(self.path2labels, self.class_index)
+        if pos_left_border is not None:
+            self.pos_paths = self.pos_paths[pos_left_border:pos_right_border]
+            self.neg_paths = self.neg_paths[neg_left_border:neg_right_border]
+
+    def __len__(self):
+        return self.n_pairs
+
+    def __getitem__(self, idx):
+        pos_label = torch.tensor(1).float()  # we push pos_image_prob be more than neg_image_prob always
+        neg_label = torch.tensor(0).float()
+
+        pos_path = self.images_dir_path / np.random.choice(self.pos_paths)
+        neg_path = self.images_dir_path / np.random.choice(self.neg_paths)
+
+        pos_image = cv2.imread(str(pos_path))
+        neg_image = cv2.imread(str(neg_path))
+
+        transformed_pos_image = self.transform(pos_image)
+        transformed_neg_image = self.transform(neg_image)
+
+        return transformed_pos_image, transformed_neg_image, pos_label, neg_label
 
 
 class CelebaSegmentation(Dataset):
