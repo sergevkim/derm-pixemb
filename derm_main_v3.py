@@ -1,16 +1,23 @@
-import numpy as np
-import time
-import torch
-import torch.nn as nn
-from torch.nn import functional as F
-import torchvision
-from torchvision import transforms
-import tqdm
 import os
-import cv2
-from torch.utils.data import Dataset
 import pickle
 import shutil
+import time
+from collections import defaultdict
+
+import cv2
+import numpy as np
+import torch
+import torch.nn as nn
+import torchvision
+import tqdm
+from torch.nn import functional as F
+from torch.utils.data import Dataset
+from torchvision import transforms
+from torchvision.transforms import Resize
+
+from datasets import (CelebaBinaryCalssification, CelebAPosNegDataset,
+                      CelebaSegmentation)
+from nn_modules import Image2Image, Image2VectorWithCE, Image2VectorWithMSE
 
 
 def get_computing_device():
@@ -93,7 +100,7 @@ def get_balanced_paths(path, first, class_name, capacity):
             break
     return images_paths, int(filename.split('.')[0]) + 1
 
-from torchvision.transforms.transforms import Resize
+
 transform = transforms.Compose([
     transforms.ToPILImage(),
     transforms.Resize((256, 256)),
@@ -106,8 +113,6 @@ train_datasets = [None] * DATASET_QUANTITY
 test_datasets = [None] * DATASET_QUANTITY
 nn_modules = [None] * DATASET_QUANTITY
 
-from datasets import CelebaBinaryCalssification, CelebaSegmentation, CelebAPosNegDataset
-from nn_modules import Image2VectorWithCE, Image2VectorWithMSE, Image2Image
 
 # pretrained_model = Image2VectorWithCE(2)
 # pretrained_model.load_state_dict(torch.load("train_32_64/nn_module_32_0.pt"))
@@ -138,7 +143,7 @@ for i in range(DATASET_QUANTITY):
         nn_modules[i] = Image2Image()
         # nn_modules[i - 32].encoder = pretrained_model.encoder
 
-from collections import defaultdict
+
 for i in range(DATASET_QUANTITY * 3 // 4):
     class_quantity = defaultdict(int)
     for el in train_datasets[i]:
