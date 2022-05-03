@@ -117,7 +117,64 @@ class CelebAPosNegDataset(Dataset):
     def __getitem__(self, idx):
         pos_label = torch.tensor(1).float()  # we push pos_image_prob be more than neg_image_prob always
         neg_label = torch.tensor(0).float()
+        print('paths lengths:', len(self.pos_paths), len(self.neg_paths))
+        pos_path = self.images_dir_path / np.random.choice(self.pos_paths)
+        neg_path = self.images_dir_path / np.random.choice(self.neg_paths)
 
+        pos_image = cv2.imread(str(pos_path))
+        neg_image = cv2.imread(str(neg_path))
+
+        transformed_pos_image = self.transform(pos_image)
+        transformed_neg_image = self.transform(neg_image)
+
+        return transformed_pos_image, transformed_neg_image, pos_label, neg_label
+
+
+class CelebAPosNegDatasetV2(Dataset):
+    def __init__(
+        self,
+        data_path: Path,
+        class_name: str,
+        transform,
+        n_pairs: int,
+
+        first: int,
+        minimal_pos_number: int = 250,
+        minimal_neg_number: int = 250,
+    ):
+        self.data_path = data_path
+        self.class_name = class_name
+        self.transform = transform
+        self.n_pairs = n_pairs
+
+        self.images_dir_path = data_path / 'img_align_celeba'
+        self.class_index = ATTRIBUTES_LIST.index(class_name)
+        self.path2labels = load_attributes(data_path / 'list_attr_celeba.txt')
+        self.pos_paths = list()
+        self.neg_paths = list()
+
+        filenames = \
+            sorted([p.name for p in self.images_dir_path.glob('*.jpg')])
+        for i in range(first, len(filenames)):
+            filename = filenames[i]
+            if self.path2labels[filename][self.class_index] == 1:
+                self.pos_paths.append(filename)
+            else:
+                self.neg_paths.append(filename)
+
+            if (
+                len(self.pos_paths) >= minimal_pos_number and
+                len(self.neg_paths) >= minimal_neg_number
+            ):
+                self.last_image_idx = i+1
+                break
+
+    def __len__(self):
+        return self.n_pairs
+
+    def __getitem__(self, idx):
+        pos_label = torch.tensor(1).float()  # we push pos_image_prob be more than neg_image_prob always
+        neg_label = torch.tensor(0).float()
         pos_path = self.images_dir_path / np.random.choice(self.pos_paths)
         neg_path = self.images_dir_path / np.random.choice(self.neg_paths)
 
