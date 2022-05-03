@@ -3,6 +3,7 @@ import pickle
 import shutil
 import time
 from collections import defaultdict
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -17,7 +18,8 @@ from torchvision.transforms import Resize
 
 from datasets import (CelebaBinaryCalssification, CelebAPosNegDataset,
                       CelebaSegmentation)
-from nn_modules import Image2Image, Image2VectorWithCE, Image2VectorWithMSE
+from nn_modules import (Image2Image, Image2VectorWithCE,
+                        Image2VectorWithMSE, Image2VectorWithCE_Pairwise)
 
 
 def get_computing_device():
@@ -107,6 +109,13 @@ transform = transforms.Compose([
     transforms.ToTensor()
 ])
 
+WIDTH, HEIGHT = 178, 218
+posneg_dataset_transform = transforms.Compose([
+    transforms.ToPILImage(),
+    transforms.Pad(((256 - WIDTH) // 2, (256 - HEIGHT) // 2)),
+    transforms.ToTensor()
+])
+
 DATASET_QUANTITY = 32
 DATASET_SIZE = 5000
 train_datasets = [None] * DATASET_QUANTITY
@@ -118,6 +127,7 @@ nn_modules = [None] * DATASET_QUANTITY
 # pretrained_model.load_state_dict(torch.load("train_32_64/nn_module_32_0.pt"))
 
 # 32 - for validation, backbone freeze
+print('CHECK 1')
 first_image = 0
 for i in range(DATASET_QUANTITY):
     if i < DATASET_QUANTITY * 3 // 4:
@@ -129,9 +139,19 @@ for i in range(DATASET_QUANTITY):
         test_images, _ = get_balanced_paths('/root/dmartynov/celeba/celeba/img_align_celeba/', 160_000, attributes_list[i], 1000)
 
         # test_images = get_paths('/root/dmartynov/celeba/celeba/img_align_celeba/', (2 * i + 1) * DATASET_SIZE, (2 * i + 2) * DATASET_SIZE)
-        train_datasets[i] = CelebaBinaryCalssification(train_images, attributes_list, annots, attributes_list[i])
-        test_datasets[i] = CelebaBinaryCalssification(test_images, attributes_list, annots, attributes_list[i])
-        nn_modules[i] = Image2VectorWithCE(2)
+        # train_datasets[i] = CelebaBinaryCalssification(train_images, attributes_list, annots, attributes_list[i])
+        # test_datasets[i] = CelebaBinaryCalssification(test_images, attributes_list, annots, attributes_list[i])
+        train_datasets[i] = CelebAPosNegDataset(
+            data_path=Path('/root/dmartynov/celeba/celeba'),
+            class_name=attributes_list[i],
+            transform=posneg_dataset_transform,
+            n_pairs=250,
+            pos_left_border=1000*i,
+            pos_right_border=1000*(i+1),
+            neg_left_border=1000*i,
+            neg_right_border=1000*(i+1),
+        )
+        nn_modules[i] = Image2VectorWithCE_Pairwise(2)
         # nn_modules[i - 32].encoder = pretrained_model.encoder
     else:
         j = i - DATASET_QUANTITY * 3 // 4 # - 32 + DATASET_QUANTITY
@@ -144,7 +164,10 @@ for i in range(DATASET_QUANTITY):
         # nn_modules[i - 32].encoder = pretrained_model.encoder
 
 
+print('CHECK 2')
+print('CHECK', DATASET_QUANTITY * 3 // 4)
 for i in range(DATASET_QUANTITY * 3 // 4):
+    print('CHECK 3:', i)
     class_quantity = defaultdict(int)
     for el in train_datasets[i]:
         class_quantity[el[1]] += 1
@@ -153,6 +176,7 @@ for i in range(DATASET_QUANTITY * 3 // 4):
     for el in test_datasets[i]:
         class_quantity[el[1]] += 1
     print(class_quantity)
+print('CHECK 4')
 
 for i in range(DATASET_QUANTITY):
     print (f"len train_dataset {i} - {len(train_datasets[i])}")
@@ -195,12 +219,18 @@ for epoch in range(NUM_EPOCHS):
                     p.requires_grad = True
 
             # optimizers[i].zero_grad()
+            pos_images, neg_images, _, _ = batch
+            pos_images = pos_images.to(device)
+            neg_images = neg_images.to(device)
+            #X_batch = batch[i][0].to(device)
+            #y_batch = batch[i][1].to(device)
 
-            X_batch = batch[i][0].to(device)
-            y_batch = batch[i][1].to(device)
-
-            predictions = nn_modules[i](X_batch)
-            loss = nn_modules[i].compute_loss(predictions,y_batch)
+            pos_predictions = nn_modules[i](pos_images)
+            neg_predictions = nn_modules[i](neg_images)
+            loss = nn_modules[i].compute_pairwise_loss(
+                pos_predictions,
+                neg_predictions,
+            )
             train_loss[i].append(loss.cpu().data.numpy())
 
             loss.backward()
@@ -218,12 +248,23 @@ for epoch in range(NUM_EPOCHS):
     for i in range(DATASET_QUANTITY):
         nn_modules[i].train(False)
         with torch.no_grad():
-            for X_batch, y_batch in val_batch_gens[i]:
-                X_batch = X_batch.to(device)
-                y_batch = y_batch.to(device)
-                predictions = nn_modules[i](X_batch)
-                loss = nn_modules[i].compute_loss(predictions,y_batch)
+            for batch_idx, batch in enumerate(val_batch_gens[i]):
+                pos_images, neg_images, _, _ = batch
+                pos_images = pos_images.to(device)
+                neg_images = neg_images.to(device)
+                pos_predictions = nn_modules[i](pos_images)
+                neg_predictions = nn_modules[i](neg_images)
+                loss = nn_modules[i].compute_loss(
+                    pos_predictions,
+                    neg_predictions,
+                )
                 train_loss[i].append(loss.cpu().data.numpy())
+            # for X_batch, y_batch in val_batch_gens[i]:
+            #     X_batch = X_batch.to(device)
+            #     y_batch = y_batch.to(device)
+            #     predictions = nn_modules[i](X_batch)
+            #     loss = nn_modules[i].compute_loss(predictions,y_batch)
+            #     train_loss[i].append(loss.cpu().data.numpy())
     for i in range(DATASET_QUANTITY):
         print(i, np.mean(train_loss[i]))
         results[i][-1].append(np.mean(train_loss[i]))
@@ -232,13 +273,23 @@ for epoch in range(NUM_EPOCHS):
     print("train metric")
     for i in range(DATASET_QUANTITY):
         nn_modules[i].train(False)
-        metric = []
+        metric = list()
+
         with torch.no_grad():
-            for X_batch, y_batch in train_batch_gens[i]:
-                X_batch = X_batch.to(device)
+            for batch_idx, batch in enumerate(train_batch_gens[i]):
+                pos_images, neg_images, pos_labels, neg_labels = batch
+                pos_images = pos_images.to(device)
+                neg_images = neg_images.to(device)
+                X_batch = torch.cat([pos_images, neg_images])
+                y_batch = torch.cat([pos_labels, neg_labels])
                 y_pred = nn_modules[i](X_batch)
                 y_pred = nn_modules[i].post_processing(y_pred)
                 metric.append(nn_modules[i].metric(y_batch, y_pred.cpu()))
+            # for X_batch, y_batch in train_batch_gens[i]:
+            #     X_batch = X_batch.to(device)
+            #     y_pred = nn_modules[i](X_batch)
+            #     y_pred = nn_modules[i].post_processing(y_pred)
+            #     metric.append(nn_modules[i].metric(y_batch, y_pred.cpu()))
         print(i, np.mean(metric))
         results[i][-1].append(np.mean(metric))
 
@@ -248,11 +299,20 @@ for epoch in range(NUM_EPOCHS):
         nn_modules[i].train(False)
         metric = []
         with torch.no_grad():
-            for X_batch, y_batch in val_batch_gens[i]:
-                X_batch = X_batch.to(device)
+            for batch_idx, batch in enumerate(val_batch_gens[i]):
+                pos_images, neg_images, pos_labels, neg_labels = batch
+                pos_images = pos_images.to(device)
+                neg_images = neg_images.to(device)
+                X_batch = torch.cat([pos_images, neg_images])
+                y_batch = torch.cat([pos_labels, neg_labels])
                 y_pred = nn_modules[i](X_batch)
                 y_pred = nn_modules[i].post_processing(y_pred)
                 metric.append(nn_modules[i].metric(y_batch, y_pred.cpu()))
+            # for X_batch, y_batch in val_batch_gens[i]:
+            #     X_batch = X_batch.to(device)
+            #     y_pred = nn_modules[i](X_batch)
+            #     y_pred = nn_modules[i].post_processing(y_pred)
+            #     metric.append(nn_modules[i].metric(y_batch, y_pred.cpu()))
         print(i, np.mean(metric))
         results[i][-1].append(np.mean(metric))
 

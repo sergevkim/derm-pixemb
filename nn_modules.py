@@ -90,6 +90,31 @@ class Image2VectorWithCE(torch.nn.Module):
         return (y_batch.cpu() == y_pred.cpu()).float().mean()
 
 
+class Image2VectorWithCE_Pairwise(torch.nn.Module):
+    def __init__(self, num_out=2):
+        super().__init__()
+        self.encoder = BACKBONE
+        self.decoder = Decoder2Vector(num_out=num_out)
+
+    def forward(self, x):
+        x = self.encoder(x)
+        return self.decoder(x)
+
+    def compute_cross_entopy_loss(predictions, gt):
+        return F.cross_entropy(predictions, gt).mean()
+    # TODO add cross entropy component
+    def compute_pairwise_loss(self, pos_predictions, neg_predictions):
+        pos_probs = torch.sigmoid(pos_predictions)
+        neg_probs = torch.sigmoid(neg_predictions)
+        return -(pos_predictions - neg_predictions).mean()
+
+    def post_processing(self, prediction):
+        return prediction.max(1)[1].data
+
+    def metric(self, y_batch, y_pred):
+        return (y_batch.cpu() == y_pred.cpu()).float().mean()
+
+
 class Image2VectorWithMSE(torch.nn.Module):
     def __init__(self, num_out=10):
         super().__init__()
