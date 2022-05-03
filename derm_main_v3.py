@@ -252,7 +252,7 @@ for epoch in range(NUM_EPOCHS):
                     neg_images = neg_images.to(device)
                     pos_predictions = nn_modules[i](pos_images)
                     neg_predictions = nn_modules[i](neg_images)
-                    loss = nn_modules[i].compute_loss(
+                    loss = nn_modules[i].compute_pairwise_loss(
                         pos_predictions,
                         neg_predictions,
                     )
